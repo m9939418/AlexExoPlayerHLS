@@ -1,12 +1,23 @@
 package com.alex.yang.hls_player.player.presentation
 
+import android.content.Context
+import android.content.Intent
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.alex.yang.hls_player.data.model.PlaybackNotificationData
+import com.alex.yang.hls_player.data.service.PlaybackService
+import com.alex.yang.hls_player.data.service.PlaybackService.Companion.ACTION_PAUSE
+import com.alex.yang.hls_player.data.service.PlaybackService.Companion.ACTION_PLAY
+import com.alex.yang.hls_player.data.service.PlaybackService.Companion.ACTION_STOP
+import com.alex.yang.hls_player.data.service.PlaybackService.Companion.EXTRA_ARTIST
+import com.alex.yang.hls_player.data.service.PlaybackService.Companion.EXTRA_ARTWORK
+import com.alex.yang.hls_player.data.service.PlaybackService.Companion.EXTRA_TITLE
+import com.alex.yang.hls_player.data.service.PlaybackService.Companion.EXTRA_URL
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,20 +31,23 @@ import javax.inject.Inject
  *
  *
  */
-const val SAMPLE_HLS = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val exoPlayer: ExoPlayer
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState = _uiState.asStateFlow()
 
-    private var hasInitialized = false
-    private var progressJob: Job? = null
-
     val player: ExoPlayer
         get() = exoPlayer
+
+    val fakeNotificationData = PlaybackNotificationData()
+
+    private var hasInitialized = false
+    private var progressJob: Job? = null
+    private var hasPrepared = false
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -52,48 +66,56 @@ class PlayerViewModel @Inject constructor(
 
     fun setUpPlayer() {
         if (hasInitialized) return
+
         hasInitialized = true
 
         exoPlayer.addListener(playerListener)
+        startProgressTracker()
 
-        val mediaItem = MediaItem.Builder()
-            .setUri(SAMPLE_HLS)
-            .setMimeType(MimeTypes.APPLICATION_M3U8)
-            .build()
-
-        exoPlayer.setMediaItem(mediaItem)
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
-
-        setUpPlayerTracker()
+        // 同步一次 UI（避免剛進來畫面顯示 0/0）
+        _uiState.update {
+            it.copy(
+                isPlaying = exoPlayer.isPlaying,
+                currentMills = exoPlayer.currentPosition,
+                totalMills = exoPlayer.duration.takeIf { d -> d > 0 } ?: it.totalMills
+            )
+        }
     }
 
     fun play() {
-        exoPlayer.playWhenReady = true
+        hasPrepared = true
+        sendAction(
+            action = ACTION_PLAY,
+            data = fakeNotificationData
+        )
     }
 
-    fun pause() {
-        exoPlayer.playWhenReady = false
+    fun pause() = sendAction(action = ACTION_PAUSE, data = fakeNotificationData)
+
+    fun stop() = {
+        hasPrepared = false
+        sendAction(action = ACTION_STOP, data = fakeNotificationData)
+
+        _uiState.update { PlayerUiState() }
     }
 
     fun togglePlayPause() {
         if (exoPlayer.isPlaying) {
             pause()
+            return
+        }
+
+        if (!hasPrepared) {
+            hasPrepared = true
+            sendAction(action = ACTION_PLAY, data = fakeNotificationData,)
         } else {
-            play()
+            sendAction(ACTION_PLAY)
         }
     }
 
-    /**
-     * 共用的跳秒邏輯，offset 可正可負
-     */
-    private fun skipBy(offsetMs: Long) {
-        val totalMills = exoPlayer.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
-        val current = exoPlayer.currentPosition
-        val target = (current + offsetMs)
-            .coerceAtLeast(0L)
-            .coerceAtMost(totalMills)
-        exoPlayer.seekTo(target)
+    fun seekTo(ms: Long) {
+        exoPlayer.seekTo(ms.coerceAtLeast(0L))
+        _uiState.update { it.copy(currentMills = exoPlayer.currentPosition) }
     }
 
     fun skipPrev1s() = skipBy(-1_000L)
@@ -104,11 +126,21 @@ class PlayerViewModel @Inject constructor(
 
     fun skipNext10s() = skipBy(10_000L)
 
-    fun seekTo(ms: Long) {
-        exoPlayer.seekTo(ms.coerceAtLeast(0L))
+    /**
+     * 共用的跳秒邏輯，offset 可正可負
+     */
+    private fun skipBy(offsetMs: Long) {
+        val totalMills = exoPlayer.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+        val current = exoPlayer.currentPosition
+
+        val target = (current + offsetMs)
+            .coerceAtLeast(0L)
+            .coerceAtMost(totalMills)
+
+        exoPlayer.seekTo(target)
     }
 
-    private fun setUpPlayerTracker() {
+    private fun startProgressTracker() {
         progressJob?.cancel()
         progressJob = viewModelScope.launch {
             while (true) {
@@ -118,10 +150,25 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    private fun sendAction(
+        action: String,
+        data: PlaybackNotificationData? = null
+    ) {
+        val intent = Intent(appContext, PlaybackService::class.java).apply {
+            this.action = action
+            data?.let {
+                putExtra(EXTRA_URL, it.url)
+                putExtra(EXTRA_TITLE, it.title)
+                putExtra(EXTRA_ARTIST, it.artist)
+                putExtra(EXTRA_ARTWORK, it.artwork)
+            }
+        }
+        ContextCompat.startForegroundService(appContext, intent)
+    }
+
     override fun onCleared() {
-        super.onCleared()
         progressJob?.cancel()
         exoPlayer.removeListener(playerListener)
-        exoPlayer.release()
+        super.onCleared()
     }
 }

@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -34,11 +36,13 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "11"
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
     }
     buildFeatures {
         compose = true
@@ -63,7 +67,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-    implementation("androidx.compose.material:material-icons-extended:1.7.7")
+    implementation("androidx.compose.material:material-icons-extended:1.7.8")
 
     // --- Hilt ---
     implementation("com.google.dagger:hilt-android:2.57.2")
@@ -71,13 +75,18 @@ dependencies {
     implementation("androidx.hilt:hilt-navigation-compose:1.3.0")
 
     // --- Navigation Compose ---
-    implementation("androidx.navigation:navigation-compose:2.8.0")
+    implementation("androidx.navigation:navigation-compose:2.9.6")
 
     // --- Kotlin Serialization Json ---
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
 
     // --- ExoPlayer ---
-    implementation("androidx.media3:media3-exoplayer:1.8.0")
-    implementation("androidx.media3:media3-ui:1.8.0")
-    implementation("androidx.media3:media3-exoplayer-hls:1.8.0")
+    implementation("androidx.media3:media3-exoplayer:1.9.0")
+    implementation("androidx.media3:media3-ui:1.9.0")
+    implementation("androidx.media3:media3-exoplayer-hls:1.9.0")
+    implementation("androidx.media3:media3-session:1.9.0")
+
+    // Coil
+    implementation(libs.coil)
+    implementation(libs.coil.compose)
 }

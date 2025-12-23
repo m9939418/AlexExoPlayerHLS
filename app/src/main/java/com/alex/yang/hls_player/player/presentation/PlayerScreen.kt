@@ -10,23 +10,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.ui.PlayerView
+import com.alex.yang.hls_player.player.presentation.component.PlayInfo
 import com.alex.yang.hls_player.player.presentation.component.PlayerAction
 import com.alex.yang.hls_player.player.presentation.component.PlayerSlider
 import com.alex.yang.hls_player.ui.theme.AlexHLSPlayerTheme
@@ -43,25 +37,7 @@ fun PlayerScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-
-    val lifecycleOwner = LocalLifecycleOwner.current
     val exoPlayer = viewModel.player
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> viewModel.play()
-                Lifecycle.Event.ON_PAUSE -> viewModel.pause()
-                else -> Unit
-            }
-        }
-
-        lifecycleOwner.lifecycle.addObserver(observer)
-
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
 
     Column(
         modifier = Modifier
@@ -82,19 +58,6 @@ fun PlayerScreen(
             }
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            style = TextStyle().copy(
-                color = Color.White,
-                fontSize = 16.sp,
-            ),
-            text = "HLS Player:\n${SAMPLE_HLS}",
-        )
-
         Spacer(modifier = Modifier.height(24.dp))
 
         // 進度條 + 時間
@@ -107,7 +70,7 @@ fun PlayerScreen(
             onSeekTo = viewModel::seekTo,
         )
 
-        Spacer(modifier = Modifier.height(60.dp))
+        Spacer(modifier = Modifier.height(30.dp))
 
         // 播放器按鈕組
         PlayerAction(
@@ -118,6 +81,10 @@ fun PlayerScreen(
             onNext10Click = viewModel::skipNext10s,
             onNextClick = viewModel::skipNext1s,
         )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        PlayInfo(data = viewModel.fakeNotificationData)
     }
 }
 
